@@ -26,7 +26,7 @@ The frontend is a single HTML page that dynamically renders the Sudoku grid and 
 
 *   **Dual Input Modes:**
     *   **Add Mode:** Enter a single, definitive number in a square. This clears any notes.
-    *   **Edit Mode:** Let's the user in multiple small "note" numbers (1-9) into any empty square to help solve the puzzle.
+    *   **Edit Mode:** Let's the user add multiple small numbers as notes into any empty square to help solve the puzzle.
 
 *   **Solution Reveal:** The 'Show Solution' button fills in only the incorrect or empty cells with a blue number, leaving the player's correct answers highlighted in red for easy review.
 
