@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sudoku</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin-top: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .header button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #difficulty-menu {
+            margin-bottom: 20px;
+        }
+
+        .difficulty-btn {
+            padding: 8px 15px;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+
+        #game-message {
+            margin-bottom: 15px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            display: none;
+        }
+
+        #game-message.message-success,
+        #game-message.message-error {
+            display: block;
+        }
+
+        .message-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .hidden { display: none; }
+
+        .container {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+        }
+
+        #sudoku-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 50px);
+            grid-template-rows: repeat(9, 50px);
+            border: 3px solid black;
+        }
+
+        .sudoku-tile {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .tile-answer {
+            font-size: 24px;
+        }
+
+        .tile-notes {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .note-cell {
+            font-size: 11px;
+            color: #6c757d;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .sudoku-tile:nth-child(3n) { border-right: 2px solid black; }
+        .sudoku-tile:nth-child(9n) { border-right: none; }
+        .sudoku-tile:nth-of-type(n+19):nth-of-type(-n+27),
+        .sudoku-tile:nth-of-type(n+46):nth-of-type(-n+54) { border-bottom: 2px solid black; }
+
+        .original-number { color: black; font-weight: bold; }
+        .user-number { color: red; }
+        .solution-number { color: #007bff; }
+        .selected { background-color: #d4e3ff; }
+
+        .right-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .mode-switcher {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+        }
+
+        .mode-btn {
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #fff;
+        }
+
+        .mode-btn.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        #number-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+        }
+
+        .number-btn {
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <button id="new-game-btn">New Game</button>
+    <button id="solve-btn" class="hidden">Show Solution</button>
+</div>
+<div id="difficulty-menu" class="hidden">
+    <button class="difficulty-btn" data-difficulty="easy">Easy</button>
+    <button class="difficulty-btn" data-difficulty="medium">Medium</button>
+    <button class="difficulty-btn" data-difficulty="hard">Hard</button>
+</div>
+
+<div id="game-message"></div>
+
+<div class="container">
+    <div id="sudoku-grid"></div>
+    <div class="right-controls">
+        <div class="mode-switcher">
+            <button id="add-mode-btn" class="mode-btn active">Add</button>
+            <button id="edit-mode-btn" class="mode-btn">Edit</button>
+        </div>
+        <div id="number-buttons"></div>
+    </div>
+</div>
+
+<script>
+    let currentMode = 'add';
+
+    const newGameBtn = document.getElementById('new-game-btn');
+    const solveBtn = document.getElementById('solve-btn');
+    const difficultyMenu = document.getElementById('difficulty-menu');
+    const gridContainer = document.getElementById('sudoku-grid');
+    const numberButtonsContainer = document.getElementById('number-buttons');
+    const messageContainer = document.getElementById('game-message');
+    const addModeBtn = document.getElementById('add-mode-btn');
+    const editModeBtn = document.getElementById('edit-mode-btn');
+    let selectedTile = null;
+
+    newGameBtn.addEventListener('click', () => difficultyMenu.classList.toggle('hidden'));
+    solveBtn.addEventListener('click', showSolution);
+    addModeBtn.addEventListener('click', () => setMode('add'));
+    editModeBtn.addEventListener('click', () => setMode('edit'));
+
+    difficultyMenu.addEventListener('click', (event) => {
+        if (event.target.classList.contains('difficulty-btn')) {
+            startNewGame(event.target.dataset.difficulty);
+            difficultyMenu.classList.add('hidden');
+        }
+    });
+
+    async function startNewGame(difficulty) {
+        try {
+            const response = await fetch(`/api/sudoku/new?difficulty=${difficulty}`);
+            if (!response.ok) throw new Error('Failed to fetch new game.');
+            const gridData = await response.json();
+            createGrid(gridData);
+            solveBtn.classList.remove('hidden');
+            hideMessage();
+        } catch (error) {
+            console.error(error);
+            displayMessage('Could not start a new game.', 'error');
+        }
+    }
+
+    function generateTileHTML() {
+        let notesHTML = '';
+        for (let i = 1; i <= 9; i++) {
+            notesHTML += `<span class="note-cell" data-note="${i}"></span>`;
+        }
+        return `<span class="tile-answer"></span><div class="tile-notes">${notesHTML}</div>`;
+    }
+
+    function createGrid(gridData) {
+        gridContainer.innerHTML = '';
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                const tile = document.createElement('div');
+                tile.classList.add('sudoku-tile');
+                tile.dataset.row = row;
+                tile.dataset.col = col;
+                tile.innerHTML = generateTileHTML();
+
+                const num = gridData[row][col];
+                if (num !== 0) {
+                    tile.querySelector('.tile-answer').textContent = num;
+                    tile.classList.add('original-number');
+                }
+                tile.addEventListener('click', () => handleTileClick(tile));
+                gridContainer.appendChild(tile);
+            }
+        }
+    }
+
+    function createEmptyGrid() {
+        gridContainer.innerHTML = '';
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                const tile = document.createElement('div');
+                tile.classList.add('sudoku-tile');
+                tile.dataset.row = row;
+                tile.dataset.col = col;
+                tile.innerHTML = generateTileHTML();
+                gridContainer.appendChild(tile);
+            }
+        }
+    }
+
+    function createNumberButtons() {
+        numberButtonsContainer.innerHTML = '';
+        for (let i = 1; i <= 9; i++) {
+            const button = document.createElement('button');
+            button.classList.add('number-btn');
+            button.textContent = i;
+            button.addEventListener('click', () => handleNumberClick(i));
+            numberButtonsContainer.appendChild(button);
+        }
+        const deleteButton = document.createElement('button');
+        deleteButton.classList.add('number-btn');
+        deleteButton.textContent = 'X';
+        deleteButton.addEventListener('click', () => handleNumberClick(null));
+        numberButtonsContainer.appendChild(deleteButton);
+    }
+
+    function handleTileClick(tile) {
+        if (selectedTile) selectedTile.classList.remove('selected');
+        selectedTile = tile;
+        selectedTile.classList.add('selected');
+    }
+
+    function handleNumberClick(num) {
+        if (!selectedTile || selectedTile.classList.contains('original-number')) return;
+
+        hideMessage();
+        const answerSpan = selectedTile.querySelector('.tile-answer');
+        const notesContainer = selectedTile.querySelector('.tile-notes');
+
+        if (currentMode === 'add') {
+            if (num === null) {
+                answerSpan.textContent = '';
+                answerSpan.className = 'tile-answer';
+            } else {
+                notesContainer.querySelectorAll('.note-cell').forEach(cell => cell.textContent = '');
+                answerSpan.textContent = num;
+                answerSpan.className = 'tile-answer user-number';
+            }
+            checkIfComplete();
+        } else {
+            if (answerSpan.textContent !== '') return;
+
+            if (num === null) {
+                notesContainer.querySelectorAll('.note-cell').forEach(cell => cell.textContent = '');
+            } else {
+                const noteCell = notesContainer.querySelector(`.note-cell[data-note='${num}']`);
+                noteCell.textContent = (noteCell.textContent === '') ? num : '';
+            }
+        }
+    }
+
+    function setMode(mode) {
+        currentMode = mode;
+        addModeBtn.classList.toggle('active', mode === 'add');
+        editModeBtn.classList.toggle('active', mode === 'edit');
+    }
+
+    async function showSolution() {
+    try {
+        const response = await fetch('/api/sudoku/solution');
+        if (!response.ok) throw new Error('Could not fetch solution.');
+        const solutionData = await response.json();
+
+        if (!solutionData) {
+            displayMessage('Start a new game first!', 'error');
+            return;
+        }
+
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                const tile = document.querySelector(`.sudoku-tile[data-row='${row}'][data-col='${col}']`);
+
+                // Skip original numbers, as they can't be changed.
+                if (tile.classList.contains('original-number')) {
+                    continue;
+                }
+
+                const answerSpan = tile.querySelector('.tile-answer');
+
+                const userValue = parseInt(answerSpan.textContent) || 0;
+
+                const correctValue = solutionData[row][col];
+
+                // Case 1: User's number is correct. We leave it alone.
+                if (userValue === correctValue) {
+                    continue; // Go to the next tile.
+                }
+
+                // Case 2: User's number is incorrect OR the tile is empty (userValue is 0).
+                // We must fill it with the blue solution number.
+
+                // Clear any pencil marks.
+                tile.querySelector('.tile-notes').querySelectorAll('.note-cell').forEach(cell => cell.textContent = '');
+
+                // Set the correct number and apply the blue "solution" style.
+                answerSpan.textContent = correctValue;
+                answerSpan.className = 'tile-answer solution-number';
+            }
+        }
+        displayMessage('Congratulations! You solved the Sudoku!', 'success');
+    } catch (error) {
+        console.error(error);
+        displayMessage('Error displaying the solution.', 'error');
+    }
+}
+
+    function checkIfComplete() {
+        for (const tile of gridContainer.children) {
+            if (tile.querySelector('.tile-answer').textContent === '') return;
+        }
+        verifySolution();
+    }
+
+    async function verifySolution() {
+        const grid = [];
+        for(let r = 0; r < 9; r++) {
+            const row = [];
+            for (let c = 0; c < 9; c++) {
+                const tile = document.querySelector(`.sudoku-tile[data-row='${r}'][data-col='${c}']`);
+                const answer = tile.querySelector('.tile-answer').textContent;
+                row.push(parseInt(answer) || 0);
+            }
+            grid.push(row);
+        }
+
+        try {
+            const response = await fetch('/api/sudoku/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(grid)
+            });
+            const isCorrect = await response.json();
+            if (isCorrect) {
+                displayMessage('Congratulations! You solved the Sudoku!', 'success');
+            } else {
+                displayMessage('Something is not quite right. Keep trying!', 'error');
+            }
+        } catch(error) {
+            console.error(error);
+            displayMessage('Could not verify the solution.', 'error');
+        }
+    }
+
+    function displayMessage(message, type) {
+        messageContainer.textContent = message;
+        messageContainer.className = '';
+        messageContainer.classList.add(`message-${type}`);
+    }
+
+    function hideMessage() {
+        messageContainer.className = '';
+        messageContainer.textContent = '';
+    }
+
+    function initializePage() {
+        createEmptyGrid();
+        createNumberButtons();
+    }
+
+    initializePage();
+</script>
+</body>
+</html>
